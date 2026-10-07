@@ -23,6 +23,8 @@ submodule(phase:plastic) phenopowerlaw
       h_0_sl_sl, &                                                                                  !< reference hardening slip - slip
       h_0_tw_sl, &                                                                                  !< reference hardening twin - slip
       h_0_tw_tw, &                                                                                  !< reference hardening twin - twin
+      f_sat_tw, &                                                                                   !< attainable twin volume fraction (1 = released behaviour)
+      m_tw, &                                                                                       !< regularisation exponent on the untwinned fraction
       gamma_char                                                                                    !< characteristic shear for twins
     real(pREAL),               allocatable, dimension(:,:) :: &
       h_sl_sl, &                                                                                    !< slip resistance from slip activity
@@ -214,10 +216,17 @@ module function plastic_phenopowerlaw_init() result(myPlasticity)
                                                                          defaultVal=misc_ones(size(N_tw))), N_tw)
       prm%c_4            = math_expand(pl%get_as1dReal('c_4',            requiredSize=size(N_tw), &
                                                                          defaultVal=misc_zeros(size(N_tw))), N_tw)
+      prm%f_sat_tw       = math_expand(pl%get_as1dReal('f_sat_tw',       requiredSize=size(N_tw), &
+                                                                         defaultVal=misc_ones(size(N_tw))), N_tw)
+      prm%m_tw           = math_expand(pl%get_as1dReal('m_tw',           requiredSize=size(N_tw), &
+                                                                         defaultVal=misc_ones(size(N_tw))), N_tw)
       ! sanity checks
       if (any(prm%dot_gamma_0_tw <= 0.0_pREAL))   extmsg = trim(extmsg)//' dot_gamma_0_tw'
       if (any(prm%n_tw           <= 0.0_pREAL))   extmsg = trim(extmsg)//' n_tw'
       if (any(xi_0_tw            <= 0.0_pREAL))   extmsg = trim(extmsg)//' xi_0_tw'
+      if (any(prm%f_sat_tw       <= 0.0_pREAL) .or. &
+          any(prm%f_sat_tw        > 1.0_pREAL))  extmsg = trim(extmsg)//' f_sat_tw'
+      if (any(prm%m_tw           <= 0.0_pREAL))  extmsg = trim(extmsg)//' m_tw'
 
     else twinActive
       xi_0_tw = emptyRealArray
@@ -225,6 +234,8 @@ module function plastic_phenopowerlaw_init() result(myPlasticity)
                prm%n_tw, &
                prm%c_3, &
                prm%c_4, &
+               prm%f_sat_tw, &
+               prm%m_tw, &
                prm%gamma_char, &
                prm%h_0_tw_sl, &
                prm%h_0_tw_tw, &
@@ -510,7 +521,10 @@ pure subroutine kinetics_tw(Mp,ph,en,&
     ddot_gamma_dtau_tw
 
   real(pREAL), dimension(param(ph)%sum_N_tw) :: &
-    tau_tw
+    tau_tw, &
+    f_free
+  real(pREAL) :: &
+    f_tw
   integer :: i
 
 
@@ -518,8 +532,11 @@ pure subroutine kinetics_tw(Mp,ph,en,&
 
     tau_tw = [(math_tensordot(Mp,prm%P_tw(1:3,1:3,i)),i=1,prm%sum_N_tw)]
 
+    f_tw = sum(stt%gamma_tw(:,en)/prm%gamma_char)
+    f_free = max(0.0_pREAL, 1.0_pREAL - f_tw/prm%f_sat_tw)                                          ! bounded untwinned volume fraction
+
     where(tau_tw > 0.0_pREAL)
-      dot_gamma_tw = (1.0_pREAL-sum(stt%gamma_tw(:,en)/prm%gamma_char)) &                           ! only twin in untwinned volume fraction
+      dot_gamma_tw = f_free**prm%m_tw &                                                             ! only twin in untwinned volume fraction
                    * prm%dot_gamma_0_tw*(tau_tw/stt%xi_tw(:,en))**prm%n_tw
     else where
       dot_gamma_tw = 0.0_pREAL
