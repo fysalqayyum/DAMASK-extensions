@@ -28,6 +28,11 @@ submodule(phase:mechanical) plastic
         myPlasticity
     end function plastic_dislotwin_init
 
+    module function plastic_dislotwinhcp_init() result(myPlasticity)
+      logical, dimension(:), allocatable :: &
+        myPlasticity
+    end function plastic_dislotwinhcp_init
+
     module function plastic_dislotungsten_init() result(myPlasticity)
       logical, dimension(:), allocatable :: &
         myPlasticity
@@ -85,6 +90,18 @@ submodule(phase:mechanical) plastic
         ph, &
         en
     end subroutine dislotwin_LpAndItsTangent
+
+    module subroutine dislotwinhcp_LpAndItsTangent(Lp,dLp_dMp,Mp,ph,en)
+      real(pREAL), dimension(3,3),     intent(out) :: &
+        Lp
+      real(pREAL), dimension(3,3,3,3), intent(out) :: &
+        dLp_dMp
+      real(pREAL), dimension(3,3),     intent(in) :: &
+        Mp
+      integer,                         intent(in) :: &
+        ph, &
+        en
+    end subroutine dislotwinhcp_LpAndItsTangent
 
     pure module subroutine dislotungsten_LpAndItsTangent(Lp,dLp_dMp,Mp,ph,en)
       real(pREAL), dimension(3,3),     intent(out) :: &
@@ -151,6 +168,36 @@ submodule(phase:mechanical) plastic
         dotState
     end function dislotwin_dotState
 
+    module function dislotwin_dotGammaSum(Mp,ph,en) result(dotGammaSum)
+      real(pREAL), dimension(3,3),  intent(in) :: &
+        Mp                                                                                          !< Mandel stress
+      integer,                      intent(in) :: &
+        ph, &
+        en
+      real(pREAL) :: &
+        dotGammaSum
+    end function dislotwin_dotGammaSum
+
+    module function dislotwinhcp_dotState(Mp,ph,en) result(dotState)
+      real(pREAL), dimension(3,3),  intent(in) :: &
+        Mp                                                                                          !< Mandel stress
+      integer,                      intent(in) :: &
+        ph, &
+        en
+      real(pREAL), dimension(plasticState(ph)%sizeDotState) :: &
+        dotState
+    end function dislotwinhcp_dotState
+
+    module function dislotwinhcp_dotGammaSum(Mp,ph,en) result(dotGammaSum)
+      real(pREAL), dimension(3,3),  intent(in) :: &
+        Mp                                                                                          !< Mandel stress
+      integer,                      intent(in) :: &
+        ph, &
+        en
+      real(pREAL) :: &
+        dotGammaSum
+    end function dislotwinhcp_dotGammaSum
+
     module function dislotungsten_dotState(Mp,ph,en) result(dotState)
       real(pREAL), dimension(3,3),  intent(in) :: &
         Mp                                                                                          !< Mandel stress
@@ -176,6 +223,12 @@ submodule(phase:mechanical) plastic
         ph, &
         en
     end subroutine dislotwin_dependentState
+
+    module subroutine dislotwinhcp_dependentState(ph,en)
+      integer,       intent(in) :: &
+        ph, &
+        en
+    end subroutine dislotwinhcp_dependentState
 
     module subroutine dislotungsten_dependentState(ph,en)
       integer,       intent(in) :: &
@@ -224,6 +277,7 @@ module subroutine plastic_init
   where(plastic_phenopowerlaw_init())     mechanical_plasticity_type = MECHANICAL_PLASTICITY_PHENOPOWERLAW
   where(plastic_kinehardening_init())     mechanical_plasticity_type = MECHANICAL_PLASTICITY_KINEHARDENING
   where(plastic_dislotwin_init())         mechanical_plasticity_type = MECHANICAL_PLASTICITY_DISLOTWIN
+  where(plastic_dislotwinhcp_init())      mechanical_plasticity_type = MECHANICAL_PLASTICITY_DISLOTWINHCP
   where(plastic_dislotungsten_init())     mechanical_plasticity_type = MECHANICAL_PLASTICITY_DISLOTUNGSTEN
   where(plastic_nonlocal_init())          mechanical_plasticity_type = MECHANICAL_PLASTICITY_NONLOCAL
 
@@ -282,6 +336,9 @@ module subroutine plastic_LpAndItsTangents(Lp, dLp_dS, dLp_dFi, &
       case (MECHANICAL_PLASTICITY_DISLOTWIN) plasticType
         call dislotwin_LpAndItsTangent(Lp,dLp_dMp,Mp,ph,en)
 
+      case (MECHANICAL_PLASTICITY_DISLOTWINHCP) plasticType
+        call dislotwinhcp_LpAndItsTangent(Lp,dLp_dMp,Mp,ph,en)
+
       case (MECHANICAL_PLASTICITY_DISLOTUNGSTEN) plasticType
         call dislotungsten_LpAndItsTangent(Lp,dLp_dMp,Mp,ph,en)
 
@@ -332,6 +389,9 @@ module function plastic_dotState(subdt,ph,en) result(dotState)
       case (MECHANICAL_PLASTICITY_DISLOTWIN) plasticType
         dotState = dislotwin_dotState(Mp,ph,en)
 
+      case (MECHANICAL_PLASTICITY_DISLOTWINHCP) plasticType
+        dotState = dislotwinhcp_dotState(Mp,ph,en)
+
       case (MECHANICAL_PLASTICITY_DISLOTUNGSTEN) plasticType
         dotState = dislotungsten_dotState(Mp,ph,en)
 
@@ -343,6 +403,40 @@ module function plastic_dotState(subdt,ph,en) result(dotState)
   end if
 
 end function plastic_dotState
+
+
+!--------------------------------------------------------------------------------------------------
+!> @brief Sum of the absolute shear rates over all active slip and twin systems.
+!> @details Model-agnostic accessor used by the ported isoductile damage source. Other plasticity
+!!          models return zero because they do not expose DAMASK2's plasticState slipRate analogue.
+!--------------------------------------------------------------------------------------------------
+module function plastic_dotGammaSum(ph,en) result(dotGammaSum)
+
+  integer, intent(in) :: &
+    ph, &
+    en
+  real(pREAL) :: &
+    dotGammaSum
+  real(pREAL), dimension(3,3) :: &
+    Mp
+
+
+  dotGammaSum = 0.0_pREAL
+
+  if (mechanical_plasticity_type(ph) == MECHANICAL_PLASTICITY_DISLOTWIN .or. &
+      mechanical_plasticity_type(ph) == MECHANICAL_PLASTICITY_DISLOTWINHCP) then
+    Mp = matmul(matmul(transpose(phase_mechanical_Fi(ph)%data(1:3,1:3,en)),&
+                       phase_mechanical_Fi(ph)%data(1:3,1:3,en)),phase_mechanical_S(ph)%data(1:3,1:3,en))
+  end if
+
+  plasticType: select case (mechanical_plasticity_type(ph))
+    case (MECHANICAL_PLASTICITY_DISLOTWIN) plasticType
+      dotGammaSum = dislotwin_dotGammaSum(Mp,ph,en)
+    case (MECHANICAL_PLASTICITY_DISLOTWINHCP) plasticType
+      dotGammaSum = dislotwinhcp_dotGammaSum(Mp,ph,en)
+  end select plasticType
+
+end function plastic_dotGammaSum
 
 
 !--------------------------------------------------------------------------------------------------
@@ -359,6 +453,9 @@ module subroutine plastic_dependentState(ph,en)
 
     case (MECHANICAL_PLASTICITY_DISLOTWIN) plasticType
       call dislotwin_dependentState(ph,en)
+
+    case (MECHANICAL_PLASTICITY_DISLOTWINHCP) plasticType
+      call dislotwinhcp_dependentState(ph,en)
 
     case (MECHANICAL_PLASTICITY_DISLOTUNGSTEN) plasticType
       call dislotungsten_dependentState(ph,en)

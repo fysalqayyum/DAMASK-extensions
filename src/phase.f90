@@ -57,11 +57,13 @@ module phase
     MECHANICAL_PLASTICITY_PHENOPOWERLAW, &
     MECHANICAL_PLASTICITY_KINEHARDENING, &
     MECHANICAL_PLASTICITY_DISLOTWIN, &
+    MECHANICAL_PLASTICITY_DISLOTWINHCP, &
     MECHANICAL_PLASTICITY_DISLOTUNGSTEN, &
     MECHANICAL_PLASTICITY_NONLOCAL, &
     MECHANICAL_EIGEN_THERMALEXPANSION, &
     DAMAGE_ISOBRITTLE, &
     DAMAGE_ANISOBRITTLE, &
+    DAMAGE_ISODUCTILE, &
     THERMAL_SOURCE_DISSIPATION, &
     THERMAL_SOURCE_EXTERNALHEAT, &
     CHEMICAL_REGULARSOLUTION, &
@@ -228,6 +230,11 @@ module phase
       integer, intent(in) :: ph,en
       real(pREAL), dimension(3,3) :: L_p
     end function mechanical_L_p
+
+    module function plastic_dotGammaSum(ph,en) result(dotGammaSum)
+      integer, intent(in) :: ph,en
+      real(pREAL) :: dotGammaSum
+    end function plastic_dotGammaSum
 
     module function mechanical_F_e(ph,en) result(F_e)
       integer, intent(in) :: ph,en

@@ -132,6 +132,11 @@ submodule(phase) mechanical
       character(len=*), intent(in) :: group
     end subroutine plastic_dislotwin_result
 
+    module subroutine plastic_dislotwinhcp_result(ph,group)
+      integer,          intent(in) :: ph
+      character(len=*), intent(in) :: group
+    end subroutine plastic_dislotwinhcp_result
+
     module subroutine plastic_dislotungsten_result(ph,group)
       integer,          intent(in) :: ph
       character(len=*), intent(in) :: group
@@ -146,6 +151,11 @@ submodule(phase) mechanical
       real(pREAL), dimension(6,6) :: homogenizedC
       integer,     intent(in) :: ph,en
     end function plastic_dislotwin_homogenizedC
+
+    module function plastic_dislotwinhcp_homogenizedC(ph,en) result(homogenizedC)
+      real(pREAL), dimension(6,6) :: homogenizedC
+      integer,     intent(in) :: ph,en
+    end function plastic_dislotwinhcp_homogenizedC
 
     pure module function elastic_C66(ph,en) result(C66)
       real(pREAL), dimension(6,6) :: C66
@@ -359,6 +369,9 @@ module subroutine mechanical_result(group,ph)
 
     case(MECHANICAL_PLASTICITY_DISLOTWIN)
       call plastic_dislotwin_result(ph,group//'mechanical/')
+
+    case(MECHANICAL_PLASTICITY_DISLOTWINHCP)
+      call plastic_dislotwinhcp_result(ph,group//'mechanical/')
 
     case(MECHANICAL_PLASTICITY_DISLOTUNGSTEN)
       call plastic_dislotungsten_result(ph,group//'mechanical/')

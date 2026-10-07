@@ -34,6 +34,7 @@ program DAMASK_grid
   use grid_mechanical_FEM
   use grid_chemical_FDM
   use grid_damage_spectral
+  use grid_damage_local
   use grid_thermal_spectral
   use result
 
@@ -112,6 +113,14 @@ program DAMASK_grid
     grid_mechanical_updateCoords
   procedure(grid_mechanical_spectral_basic_restartWrite), pointer :: &
     grid_mechanical_restartWrite
+  procedure(grid_damage_spectral_init), pointer :: &
+    grid_damage_init => null()
+  procedure(grid_damage_spectral_forward), pointer :: &
+    grid_damage_forward => null()
+  procedure(grid_damage_spectral_solution), pointer :: &
+    grid_damage_solution => null()
+  procedure(grid_damage_spectral_restartWrite), pointer :: &
+    grid_damage_restartWrite => null()
 
   type(tDict), pointer :: &
     load, &
@@ -203,8 +212,26 @@ program DAMASK_grid
 !--------------------------------------------------------------------------------------------------
 ! initialize field solver information
   if (solver%get_asStr('thermal',defaultVal = 'n/a') == 'spectral') nActiveFields = nActiveFields + 1
-  if (solver%get_asStr('damage', defaultVal = 'n/a') == 'spectral') nActiveFields = nActiveFields + 1
   if (solver%get_asStr('chemical', defaultVal = 'n/a') == 'FDM')    nActiveFields = nActiveFields + 1
+
+  select case (solver%get_asStr('damage',defaultVal='n/a'))
+    case ('spectral')
+      grid_damage_init         => grid_damage_spectral_init
+      grid_damage_forward      => grid_damage_spectral_forward
+      grid_damage_solution     => grid_damage_spectral_solution
+      grid_damage_restartWrite => grid_damage_spectral_restartWrite
+      nActiveFields = nActiveFields + 1
+    case ('local')
+      grid_damage_init         => grid_damage_local_init
+      grid_damage_forward      => grid_damage_local_forward
+      grid_damage_solution     => grid_damage_local_solution
+      grid_damage_restartWrite => grid_damage_local_restartWrite
+      nActiveFields = nActiveFields + 1
+    case ('n/a')
+      grid_damage_init => null()
+    case default
+      call IO_error(601_pI16,trim(solver%get_asStr('damage')), 'is not a valid damage solver type', emph=[1])
+  end select
 
   allocate(solres(nActiveFields))
   allocate(    ID(nActiveFields))
@@ -216,7 +243,7 @@ program DAMASK_grid
     ID(field) = FIELD_THERMAL_ID
     active_parabolic = .true.
   end if thermalActive
-  damageActive: if (solver%get_asStr('damage',defaultVal = 'n/a') == 'spectral') then
+  damageActive: if (associated(grid_damage_init)) then
     field = field + 1
     ID(field) = FIELD_DAMAGE_ID
     active_parabolic = .true.
@@ -238,7 +265,7 @@ program DAMASK_grid
         call grid_thermal_spectral_init(num_grid%get_dict('thermal',defaultVal=emptyDict))
 
       case (FIELD_DAMAGE_ID)
-        call grid_damage_spectral_init(num_grid%get_dict('damage',defaultVal=emptyDict))
+        call grid_damage_init(num_grid%get_dict('damage',defaultVal=emptyDict))
 
       case (FIELD_CHEMICAL_ID)
         call grid_chemical_FDM_init(num_grid%get_dict('chemical',defaultVal=emptyDict))
@@ -331,7 +358,7 @@ program DAMASK_grid
                 else
                   call grid_thermal_spectral_forward(cutBack, guess, Delta_t, Delta_t_prev, t_remaining)
                 end if
-              case(FIELD_DAMAGE_ID); call grid_damage_spectral_forward(cutBack)
+              case(FIELD_DAMAGE_ID); call grid_damage_forward(cutBack)
               case(FIELD_CHEMICAL_ID); call grid_chemical_FDM_forward(cutBack)
             end select
           end do
@@ -351,7 +378,7 @@ program DAMASK_grid
                 case(FIELD_THERMAL_ID)
                   solres(field) = grid_thermal_spectral_solution(Delta_t)
                 case(FIELD_DAMAGE_ID)
-                  solres(field) = grid_damage_spectral_solution(Delta_t)
+                  solres(field) = grid_damage_solution(Delta_t)
                 case(FIELD_CHEMICAL_ID)
                   solres(field) = grid_chemical_FDM_solution(Delta_t)
               end select
@@ -422,7 +449,7 @@ program DAMASK_grid
               case(FIELD_THERMAL_ID)
                 call grid_thermal_spectral_restartWrite()
               case(FIELD_DAMAGE_ID)
-                call grid_damage_spectral_restartWrite()
+                call grid_damage_restartWrite()
               case(FIELD_CHEMICAL_ID)
                 call grid_chemical_FDM_restartWrite()
             end select

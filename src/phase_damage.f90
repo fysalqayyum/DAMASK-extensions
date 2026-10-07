@@ -31,6 +31,10 @@ submodule(phase) damage
       logical, dimension(:), allocatable :: mySources
     end function isobrittle_init
 
+    module function isoductile_init() result(mySources)
+      logical, dimension(:), allocatable :: mySources
+    end function isoductile_init
+
 
     module subroutine isobrittle_deltaState(C, Fe, ph, en)
       integer, intent(in) :: ph,en
@@ -47,6 +51,10 @@ submodule(phase) damage
         M_i
     end subroutine anisobrittle_dotState
 
+    module subroutine isoductile_dotState(ph, en)
+      integer, intent(in) :: ph,en
+    end subroutine isoductile_dotState
+
 
     module subroutine anisobrittle_result(phase,group)
       integer,          intent(in) :: phase
@@ -57,6 +65,11 @@ submodule(phase) damage
       integer,          intent(in) :: phase
       character(len=*), intent(in) :: group
     end subroutine isobrittle_result
+
+    module subroutine isoductile_result(phase,group)
+      integer,          intent(in) :: phase
+      character(len=*), intent(in) :: group
+    end subroutine isoductile_result
 
  end interface
 
@@ -96,11 +109,7 @@ module subroutine damage_init()
     allocate(current(ph)%phi(Nmembers),source=1.0_pREAL)
 
     phase => phases%get_dict(ph)
-    if (damage_active) then
-      damage => phase%get_dict('damage')
-    else
-      damage => phase%get_dict('damage',defaultVal=emptyDict)
-    end if
+    damage => phase%get_dict('damage',defaultVal=emptyDict)
 
     if (size(damage) > 0) then
       damage_active = .true.
@@ -125,12 +134,13 @@ module subroutine damage_init()
 
   where(isobrittle_init()  ) damage_type = DAMAGE_ISOBRITTLE
   where(anisobrittle_init()) damage_type = DAMAGE_ANISOBRITTLE
+  where(isoductile_init()  ) damage_type = DAMAGE_ISODUCTILE
   phase_damage_maxSizeDotState = maxval(damageState%sizeDotState)
 
   if (damage_active) then
     do ph = 1,size(phases)
       phase => phases%get_dict(ph)
-      damage => phase%get_dict('damage')
+      damage => phase%get_dict('damage',defaultVal=emptyDict)
       if (any(damage%keys() == 'type') .and. damage_type(ph) == UNDEFINED) &
         call IO_error(200,label1='damage',ext_msg=damage%get_asStr('type'))
     end do
@@ -173,7 +183,7 @@ module function phase_damage_C66(C66,ph,en) result(C66_degraded)
 
 
   damageType: select case (damage_type(ph))
-    case (DAMAGE_ISOBRITTLE) damageType
+    case (DAMAGE_ISOBRITTLE, DAMAGE_ISODUCTILE) damageType
       C66_degraded = C66 * damage_phi(ph,en)**2
     case default damageType
       C66_degraded = C66
@@ -225,6 +235,9 @@ module function phase_f_phi(phi,co,ce) result(f)
     case(DAMAGE_ISOBRITTLE,DAMAGE_ANISOBRITTLE)
       f = 1.0_pREAL &
         - 2.0_pREAL * phi*damageState(ph)%state(1,en)                                               ! ToDo: MD: seems to be phi**2
+    case(DAMAGE_ISODUCTILE)
+      f = 1.0_pREAL &
+        - phi*damageState(ph)%state(1,en)                                                            ! identical to DAMASK2 source_damage_isoDuctile_getRateAndItsTangent
     case default
       f = 0.0_pREAL
   end select
@@ -336,7 +349,7 @@ module subroutine damage_restartWrite(groupHandle,ph)
 
 
   select case(damage_type(ph))
-    case(DAMAGE_ISOBRITTLE,DAMAGE_ANISOBRITTLE)
+    case(DAMAGE_ISOBRITTLE,DAMAGE_ANISOBRITTLE,DAMAGE_ISODUCTILE)
       call HDF5_write(damageState(ph)%state,groupHandle,'omega_damage')
   end select
 
@@ -350,7 +363,7 @@ module subroutine damage_restartRead(groupHandle,ph)
 
 
   select case(damage_type(ph))
-    case(DAMAGE_ISOBRITTLE,DAMAGE_ANISOBRITTLE)
+    case(DAMAGE_ISOBRITTLE,DAMAGE_ANISOBRITTLE,DAMAGE_ISODUCTILE)
   call HDF5_read(damageState(ph)%state0,groupHandle,'omega_damage')
   end select
 
@@ -378,6 +391,9 @@ module subroutine damage_result(group,ph)
     case (DAMAGE_ANISOBRITTLE) sourceType
       call anisobrittle_result(ph,group//'damage/')
 
+    case (DAMAGE_ISODUCTILE) sourceType
+      call isoductile_result(ph,group//'damage/')
+
   end select sourceType
 
 end subroutine damage_result
@@ -402,6 +418,9 @@ function phase_damage_collectDotState(ph,en) result(status)
 
       case (DAMAGE_ANISOBRITTLE) sourceType
         call anisobrittle_dotState(mechanical_S(ph,en), ph,en) ! ToDo: use M_d
+
+      case (DAMAGE_ISODUCTILE) sourceType
+        call isoductile_dotState(ph,en)
 
     end select sourceType
 
