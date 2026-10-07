@@ -530,10 +530,11 @@ end subroutine result_writeVectorDataset_int
 !--------------------------------------------------------------------------------------------------
 subroutine result_mapping_phase(ID,entry,label)
 
-  integer,          dimension(:,:), intent(in) :: ID                                                !< phase ID at (co,ce)
+  integer,          dimension(:,:), intent(in) :: ID                                                !< phase ID at (co,ce), 0 for padding
   integer,          dimension(:,:), intent(in) :: entry                                             !< phase entry at (co,ce)
   character(len=*), dimension(:),   intent(in) :: label                                             !< label of each phase section
 
+  character(len=len(label)), dimension(size(ID,1),size(ID,2)) :: labelPadded                        !< phase string at (co,ce), padded with '' for empty constituents
   integer(pI64), dimension(size(entry,1),size(entry,2)) :: entryGlobal
   integer(pI64), dimension(size(label),0:worldsize-1) :: entryOffset                                !< offset in entry counting per process
   integer(MPI_INTEGER_KIND), dimension(0:worldsize-1) :: writeSize                                  !< amount of data written per process
@@ -577,15 +578,18 @@ subroutine result_mapping_phase(ID,entry,label)
   entryOffset = 0_pI64
   do co = 1, size(ID,1)
     do ce = 1, size(ID,2)
-      entryOffset(ID(co,ce),worldrank) = entryOffset(ID(co,ce),worldrank) +1_pI64
+      if (ID(co,ce) /= 0) &
+        entryOffset(ID(co,ce),worldrank) = entryOffset(ID(co,ce),worldrank) +1_pI64
     end do
   end do
   call MPI_Allreduce(MPI_IN_PLACE,entryOffset,size(entryOffset),MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,err_MPI)! get offset at each process
   call parallelization_chkerr(err_MPI)
   entryOffset(:,worldrank) = sum(entryOffset(:,0:worldrank-1),2)
+  entryGlobal = -1_pI64
   do co = 1, size(ID,1)
     do ce = 1, size(ID,2)
-      entryGlobal(co,ce) = int(entry(co,ce),pI64) -1_pI64 + entryOffset(ID(co,ce),worldrank)
+      if (ID(co,ce) /= 0) &
+        entryGlobal(co,ce) = int(entry(co,ce),pI64) -1_pI64 + entryOffset(ID(co,ce),worldrank)
     end do
   end do
 #endif
@@ -598,7 +602,7 @@ subroutine result_mapping_phase(ID,entry,label)
 ! compound type: label(ID) + entry
   call H5Tcopy_f(H5T_NATIVE_CHARACTER, dt_id, hdferr)
   call HDF5_chkerr(hdferr)
-  call H5Tset_size_f(dt_id, int(len(label(1)),SIZE_T), hdferr)
+  call H5Tset_size_f(dt_id, int(len(label),SIZE_T), hdferr)
   call HDF5_chkerr(hdferr)
   call H5Tget_size_f(dt_id, type_size_str, hdferr)
   call HDF5_chkerr(hdferr)
@@ -649,10 +653,17 @@ subroutine result_mapping_phase(ID,entry,label)
   call H5Dcreate_f(loc_id, 'phase', dtype_id, filespace_id, dset_id, hdferr)
   call HDF5_chkerr(hdferr)
 
-  call H5Dwrite_f(dset_id, label_id, reshape(label(pack(ID,.true.)),myShape), &
+  labelPadded = ''
+  do co = 1, size(ID,1)
+    do ce = 1, size(ID,2)
+      if (ID(co,ce) > 0) &
+        labelPadded(co,ce) = label(ID(co,ce))
+    end do
+  end do
+  call H5Dwrite_f(dset_id, label_id, labelPadded, &
                   myShape, hdferr, file_space_id = filespace_id, mem_space_id = memspace_id, xfer_prp = plist_id)
   call HDF5_chkerr(hdferr)
-  call H5Dwrite_f(dset_id, entry_id, reshape(pack(entryGlobal,.true.),myShape), &
+  call H5Dwrite_f(dset_id, entry_id, entryGlobal, &
                   myShape, hdferr, file_space_id = filespace_id, mem_space_id = memspace_id, xfer_prp = plist_id)
   call HDF5_chkerr(hdferr)
 
