@@ -10,6 +10,8 @@ This branch is DAMASK 3.1.0 (tag `v3.1.0`) plus the changes below. Everything el
 | Isotropic ductile damage source (DAMASK 2.0.3 `isoDuctile`) | `src/phase_damage_isoductile.f90` | `damage: {type: isoductile, gamma_crit: ..., N: ...}` |
 | Local (per-cell) damage solver, no gradient term | `src/grid/grid_damage_local.f90`, `src/grid/DAMASK_grid.f90` | load case `solver: {damage: local}` |
 
+The new models are registered through the usual dispatch points, so the patch also touches `src/phase.f90`, `src/phase_damage.f90`, `src/phase_mechanical.f90`, `src/phase_mechanical_elastic.f90` and `src/phase_mechanical_plastic.f90`; `src/phase_mechanical_plastic_dislotwin.f90` gains `dislotwin_dotGammaSum`, the accumulated-shear-rate interface that the isoductile source reads.
+
 The local solver reproduces DAMASK 2.0.3's local damage homogenisation and is mesh dependent. For predictive damage studies use the stock nonlocal solver (`damage: spectral`) with a physical length scale and a mesh-sensitivity check.
 
 ## Fixes
