@@ -1,7 +1,6 @@
 ! SPDX-License-Identifier: AGPL-3.0-or-later
 !--------------------------------------------------------------------------------------------------
-!> @author Faisal Qayyum, Kyoto University
-!> @author Claude (Anthropic), implementation assistant
+!> @author Faisal Qayyum, University of Tabuk
 !> @brief material subroutine incorporating dislocation and deformation twinning physics for
 !!        hexagonal close-packed crystals
 !> @details Extends the dislotwin approach of Wong et al. (Acta Materialia 118:140-151, 2016)
