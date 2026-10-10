@@ -148,6 +148,16 @@ submodule(phase:mechanical) plastic
         dotState
     end function phenopowerlaw_dotState
 
+    module function phenopowerlaw_dotGammaSum(Mp,ph,en) result(dotGammaSum)
+      real(pREAL), dimension(3,3),  intent(in) :: &
+        Mp                                                                                          !< Mandel stress
+      integer,                      intent(in) :: &
+        ph, &
+        en
+      real(pREAL) :: &
+        dotGammaSum
+    end function phenopowerlaw_dotGammaSum
+
     module function plastic_kinehardening_dotState(Mp,ph,en) result(dotState)
       real(pREAL), dimension(3,3),  intent(in) :: &
         Mp                                                                                          !< Mandel stress
@@ -407,8 +417,8 @@ end function plastic_dotState
 
 !--------------------------------------------------------------------------------------------------
 !> @brief Sum of the absolute shear rates over all active slip and twin systems.
-!> @details Model-agnostic accessor used by the ported isoductile damage source. Other plasticity
-!!          models return zero because they do not expose DAMASK2's plasticState slipRate analogue.
+!> @details Model-agnostic accessor used by the ported isoductile damage source (dislotwin,
+!!          dislotwinHCP, phenopowerlaw). Other plasticity models return zero.
 !--------------------------------------------------------------------------------------------------
 module function plastic_dotGammaSum(ph,en) result(dotGammaSum)
 
@@ -424,7 +434,8 @@ module function plastic_dotGammaSum(ph,en) result(dotGammaSum)
   dotGammaSum = 0.0_pREAL
 
   if (mechanical_plasticity_type(ph) == MECHANICAL_PLASTICITY_DISLOTWIN .or. &
-      mechanical_plasticity_type(ph) == MECHANICAL_PLASTICITY_DISLOTWINHCP) then
+      mechanical_plasticity_type(ph) == MECHANICAL_PLASTICITY_DISLOTWINHCP .or. &
+      mechanical_plasticity_type(ph) == MECHANICAL_PLASTICITY_PHENOPOWERLAW) then
     Mp = matmul(matmul(transpose(phase_mechanical_Fi(ph)%data(1:3,1:3,en)),&
                        phase_mechanical_Fi(ph)%data(1:3,1:3,en)),phase_mechanical_S(ph)%data(1:3,1:3,en))
   end if
@@ -434,6 +445,8 @@ module function plastic_dotGammaSum(ph,en) result(dotGammaSum)
       dotGammaSum = dislotwin_dotGammaSum(Mp,ph,en)
     case (MECHANICAL_PLASTICITY_DISLOTWINHCP) plasticType
       dotGammaSum = dislotwinhcp_dotGammaSum(Mp,ph,en)
+    case (MECHANICAL_PLASTICITY_PHENOPOWERLAW) plasticType
+      dotGammaSum = phenopowerlaw_dotGammaSum(Mp,ph,en)
   end select plasticType
 
 end function plastic_dotGammaSum

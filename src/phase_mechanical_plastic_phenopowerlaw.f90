@@ -554,4 +554,35 @@ pure subroutine kinetics_tw(Mp,ph,en,&
 
 end subroutine kinetics_tw
 
+!--------------------------------------------------------------------------------------------------
+!> @brief Sum of the absolute shear rates over all slip and twin systems.
+!> @details Drive of the isoductile damage source (plastic_dotGammaSum); recomputes the same
+!!          kinetics as phenopowerlaw_dotState, whose gamma_sl state integrates abs(dot_gamma_sl).
+!--------------------------------------------------------------------------------------------------
+module function phenopowerlaw_dotGammaSum(Mp,ph,en) result(dotGammaSum)
+
+  real(pREAL), dimension(3,3),  intent(in) :: &
+    Mp                                                                                              !< Mandel stress
+  integer,                      intent(in) :: &
+    ph, &
+    en
+  real(pREAL) :: &
+    dotGammaSum
+
+  real(pREAL), dimension(param(ph)%sum_N_sl) :: &
+    dot_gamma_sl
+  real(pREAL), dimension(param(ph)%sum_N_tw) :: &
+    dot_gamma_tw
+
+
+  call kinetics_sl(Mp,ph,en, dot_gamma_sl)
+  dotGammaSum = sum(abs(dot_gamma_sl))
+
+  if (param(ph)%sum_N_tw > 0) then
+    call kinetics_tw(Mp,ph,en, dot_gamma_tw)
+    dotGammaSum = dotGammaSum + sum(abs(dot_gamma_tw))
+  end if
+
+end function phenopowerlaw_dotGammaSum
+
 end submodule phenopowerlaw
